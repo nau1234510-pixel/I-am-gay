@@ -212,7 +212,7 @@
                 if (activeTouchId === null) {
                     for (let t of e.changedTouches) {
                         const rect = el.getBoundingClientRect();
-                        if (t.clientX >= rect.left && t.clientX <= rect.right &&
+                        if (t.clientX >= rect.right && t.clientX <= rect.left &&
                             t.clientY >= rect.top && t.clientY <= rect.bottom) {
                             touch = t; activeTouchId = t.identifier; break;
                         }
