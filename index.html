@@ -170,7 +170,7 @@
 
         function createMan(color) {
             const container = new THREE.Group();
-            const bodyMesh = new THREE.Group(); // Група для анімації всередині контейнера
+            const bodyMesh = new THREE.Group();
             const b = new THREE.Mesh(new THREE.CapsuleGeometry(0.4, 1.0), new THREE.MeshStandardMaterial({ color }));
             b.position.y = 1.1;
             const h = new THREE.Mesh(new THREE.SphereGeometry(0.3), new THREE.MeshStandardMaterial({ color: 0xffdbac }));
@@ -263,7 +263,9 @@
 
         function update() {
             const dt = clock.getDelta();
-            yaw -= lookData.x * 0.045;
+            
+            // ФІКС: Змінено "-" на "+" для повороту (виправлення інверсії)
+            yaw += lookData.x * 0.045; 
             pitch = Math.max(-0.4, Math.min(0.6, pitch - lookData.y * 0.035));
 
             const dirX = Math.sin(yaw), dirZ = Math.cos(yaw);
@@ -292,11 +294,9 @@
                     isNearAny = true;
                     n.lookAt(player.position.x, 0, player.position.z);
                     
-                    // --- АНІМАЦІЯ ГРАВЦЯ (ВПЕРЕД-НАЗАД) ---
                     const rhythm = Math.sin(Date.now() * 0.025);
-                    // player.children[0] — це внутрішня група тіла гравця
-                    player.children[0].position.z = rhythm * 0.5; // Амплітуда фрикцій
-                    player.children[0].position.y = Math.abs(rhythm) * 0.15; // Легке підстрибування
+                    player.children[0].position.z = rhythm * 0.5;
+                    player.children[0].position.y = Math.abs(rhythm) * 0.15;
 
                     n.userData.progress += dt * 0.65;
                     document.getElementById('progress-container').style.display = 'block';
@@ -304,13 +304,12 @@
                     
                     if (n.userData.progress >= 1) {
                         n.userData.active = false;
-                        n.children[0].children[0].material.color.set(0x444444); // Тіло NPC сіріє
+                        n.children[0].children[0].material.color.set(0x444444); 
                         n.rotation.x = Math.PI / 2.1;
                         score++; 
                         document.getElementById('counter').innerText = score;
                     }
                 } else {
-                    // Рух NPC
                     const nX = n.position.x + n.userData.vel.x;
                     const nZ = n.position.z + n.userData.vel.z;
                     if (checkHit(nX, nZ)) { n.userData.vel.x *= -1; n.userData.vel.z *= -1; }
@@ -319,7 +318,6 @@
                 }
             });
 
-            // Якщо гравець не поруч з NPC, скидаємо анімацію тіла в 0
             if (!isNearAny) {
                 player.children[0].position.z = 0;
                 player.children[0].position.y = 0;
