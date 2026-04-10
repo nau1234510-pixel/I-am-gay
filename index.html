@@ -264,17 +264,14 @@
         function update() {
             const dt = clock.getDelta();
             
-            // КЛЮЧОВЕ ВИПРАВЛЕННЯ:
-            // Використовуємо += щоб рух пальця вправо (lookData.x > 0) 
-            // відповідав повороту камери вправо.
-            yaw += lookData.x * 0.06; 
+            // ВАРІАНТ 1: Якщо ведемо джойстик вправо, кут yaw має зменшуватися (поворот вправо в Three.js)
+            // Якщо цей варіант знову не той — просто зміни мінус на плюс в рядку нижче.
+            yaw -= lookData.x * 0.06; 
             pitch = Math.max(-0.4, Math.min(0.6, pitch - lookData.y * 0.04));
 
-            // Розрахунок напрямку з урахуванням виправленого yaw
             const dirX = Math.sin(yaw), dirZ = Math.cos(yaw);
             const speed = 16 * dt;
 
-            // Рух має бути відносно камери
             let speedX = (dirX * -moveData.y * speed + Math.cos(yaw) * moveData.x * speed);
             let speedZ = (dirZ * -moveData.y * speed - Math.sin(yaw) * moveData.x * speed);
             
