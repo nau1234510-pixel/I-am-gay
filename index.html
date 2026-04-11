@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Game - Alpha Version (Stable)</title>
+    <title>Game - Alpha Version</title>
     <style>
         body {
             margin: 0;
@@ -98,35 +98,20 @@
             pointer-events: none;
             opacity: 0.6;
         }
-        
-        #reset-btn {
-            position: absolute;
-            top: 45px;
-            right: 15px;
-            background: rgba(255, 0, 0, 0.5);
-            color: white;
-            border: 1px solid white;
-            padding: 5px 10px;
-            border-radius: 5px;
-            font-size: 10px;
-            cursor: pointer;
-            z-index: 100;
-        }
     </style>
 </head>
 
 <body>
 
     <div id="alpha-notice">
-        Альфа-версія. Помилки: <b>nau1234510@gmail.com</b>
+        Ця гра знаходиться в Альфа версії. Якщо знайдете помилки, повідомте на <b>nau1234510@gmail.com</b>
     </div>
 
     <div id="ui">ЗАТРАХАНО: <span id="counter">0</span></div>
     <div id="progress-container">
         <div id="progress-bar"></div>
     </div>
-    <div id="instr">Лівий - Рух | Правий - Огляд</div>
-    <button id="reset-btn">Reset</button>
+    <div id="instr">Лівий джойстик - Рух | Правий - Огляд</div>
 
     <div id="move-joy" class="joystick"><div class="stick"></div></div>
     <div id="look-joy" class="joystick"><div class="stick"></div></div>
@@ -138,11 +123,224 @@
     <script type="module">
         import * as THREE from 'three';
 
-        // Ініціалізація сцени
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x87ceeb);
         scene.fog = new THREE.Fog(0x87ceeb, 30, 200);
 
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        document.body.appendChild(renderer.domElement);
+
+        scene.add(new THREE.AmbientLight(0xffffff, 0.9));
+        const sun = new THREE.DirectionalLight(0xffffff, 0.6);
+        sun.position.set(50, 100, 50);
+        scene.add(sun);
+
+        const mapSize = 400;
+        const obstacles = [];
+        const grass = new THREE.Mesh(new THREE.PlaneGeometry(mapSize, mapSize), new THREE.MeshStandardMaterial({ color: 0x3d8c40 }));
+        grass.rotation.x = -Math.PI / 2;
+        scene.add(grass);
+
+        function addTree(x, z) {
+            const g = new THREE.Group();
+            const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.6, 4), new THREE.MeshStandardMaterial({ color: 0x4b3621 }));
+            trunk.position.y = 2;
+            const top = new THREE.Mesh(new THREE.SphereGeometry(2.5), new THREE.MeshStandardMaterial({ color: 0x2d5a27 }));
+            top.position.y = 5;
+            g.add(trunk, top); 
+            g.position.set(x, 0, z);
+            scene.add(g); 
+            obstacles.push({ x, z, r: 1.8 });
+        }
+
+        for (let i = -190; i <= 190; i += 20) {
+            for (let j = -190; j <= 190; j += 20) {
+                if (Math.random() > 0.4) {
+                    const offX = (Math.random() - 0.5) * 12;
+                    const offZ = (Math.random() - 0.5) * 12;
+                    if (Math.abs(i + offX) > 8 || Math.abs(j + offZ) > 8) {
+                        addTree(i + offX, j + offZ);
+                    }
+                }
+            }
+        }
+
+        function createMan(color) {
+            const container = new THREE.Group();
+            const bodyMesh = new THREE.Group();
+            const b = new THREE.Mesh(new THREE.CapsuleGeometry(0.4, 1.0), new THREE.MeshStandardMaterial({ color }));
+            b.position.y = 1.1;
+            const h = new THREE.Mesh(new THREE.SphereGeometry(0.3), new THREE.MeshStandardMaterial({ color: 0xffdbac }));
+            h.position.y = 2.0;
+            bodyMesh.add(b, h);
+            container.add(bodyMesh); 
+            return container;
+        }
+
+        const player = createMan(0xff00ff);
+        scene.add(player);
+
+        const npcs = [];
+        function spawnNPC() {
+            const n = createMan(0x00ccff);
+            n.position.set((Math.random() - 0.5) * 360, 0, (Math.random() - 0.5) * 360);
+            n.userData = { 
+                active: true, 
+                progress: 0, 
+                vel: new THREE.Vector3((Math.random() - 0.5) * 0.12, 0, (Math.random() - 0.5) * 0.12) 
+            };
+            npcs.push(n); scene.add(n);
+        }
+        for (let i = 0; i < 45; i++) spawnNPC();
+
+        let yaw = 0, pitch = 0.2;
+        const moveData = { x: 0, y: 0 };
+        const lookData = { x: 0, y: 0 };
+        const keys = {};
+
+        const setupJoystick = (id, data) => {
+            const el = document.getElementById(id);
+            const stick = el.querySelector('.stick');
+            const limit = 50;
+            let activeTouchId = null;
+
+            const handleTouch = (e) => {
+                let touch = null;
+                if (activeTouchId === null) {
+                    for (let t of e.changedTouches) {
+                        const rect = el.getBoundingClientRect();
+                        if (t.clientX >= rect.left && t.clientX <= rect.right &&
+                            t.clientY >= rect.top && t.clientY <= rect.bottom) {
+                            touch = t; activeTouchId = t.identifier; break;
+                        }
+                    }
+                } else {
+                    for (let t of e.touches) { if (t.identifier === activeTouchId) { touch = t; break; } }
+                }
+                if (!touch) return;
+                const rect = el.getBoundingClientRect();
+                let dx = touch.clientX - (rect.left + rect.width / 2);
+                let dy = touch.clientY - (rect.top + rect.height / 2);
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist > limit) { dx *= limit / dist; dy *= limit / dist; }
+                data.x = dx / limit; data.y = dy / limit;
+                stick.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+                e.preventDefault();
+            };
+
+            el.addEventListener('touchstart', handleTouch, { passive: false });
+            el.addEventListener('touchmove', handleTouch, { passive: false });
+            el.addEventListener('touchend', (e) => {
+                for (let t of e.changedTouches) {
+                    if (t.identifier === activeTouchId) {
+                        activeTouchId = null; data.x = 0; data.y = 0;
+                        stick.style.transform = `translate(-50%, -50%)`;
+                        break;
+                    }
+                }
+            });
+        };
+
+        setupJoystick('move-joy', moveData);
+        setupJoystick('look-joy', lookData);
+
+        window.onkeydown = (e) => keys[e.code] = true;
+        window.onkeyup = (e) => keys[e.code] = false;
+
+        let score = 0;
+        const clock = new THREE.Clock();
+
+        function checkHit(tx, tz) {
+            if (Math.abs(tx) > 198 || Math.abs(tz) > 198) return true;
+            for (let o of obstacles) {
+                if (Math.sqrt((tx - o.x) ** 2 + (tz - o.z) ** 2) < o.r) return true;
+            }
+            return false;
+        }
+
+        function update() {
+            const dt = clock.getDelta();
+            
+            yaw -= lookData.x * 0.06; 
+            pitch = Math.max(-0.4, Math.min(0.6, pitch - lookData.y * 0.04));
+
+            const dirX = Math.sin(yaw), dirZ = Math.cos(yaw);
+            const speed = 16 * dt;
+
+            // ВИПРАВЛЕНО: Корекція знаків для руху вліво/вправо (moveData.x)
+            let speedX = (dirX * -moveData.y * speed - Math.cos(yaw) * moveData.x * speed);
+            let speedZ = (dirZ * -moveData.y * speed + Math.sin(yaw) * moveData.x * speed);
+            
+            if (keys['KeyW']) { speedX += dirX * speed; speedZ += dirZ * speed; }
+            if (keys['KeyS']) { speedX -= dirX * speed; speedZ -= dirZ * speed; }
+
+            if (!checkHit(player.position.x + speedX, player.position.z)) player.position.x += speedX;
+            if (!checkHit(player.position.x, player.position.z + speedZ)) player.position.z += speedZ;
+            player.rotation.y = yaw;
+
+            camera.position.x = player.position.x - dirX * 9;
+            camera.position.z = player.position.z - dirZ * 9;
+            camera.position.y = player.position.y + 4.5 + pitch * 5;
+            camera.lookAt(player.position.x, player.position.y + 1.2, player.position.z);
+
+            let isNearAny = false;
+            npcs.forEach(n => {
+                if (!n.userData.active) return;
+                const d = player.position.distanceTo(n.position);
+
+                if (d < 2.2) {
+                    isNearAny = true;
+                    n.lookAt(player.position.x, 0, player.position.z);
+                    
+                    const rhythm = Math.sin(Date.now() * 0.025);
+                    player.children[0].position.z = rhythm * 0.5;
+                    player.children[0].position.y = Math.abs(rhythm) * 0.15;
+
+                    n.userData.progress += dt * 0.65;
+                    document.getElementById('progress-container').style.display = 'block';
+                    document.getElementById('progress-bar').style.width = (Math.min(n.userData.progress, 1) * 100) + '%';
+                    
+                    if (n.userData.progress >= 1) {
+                        n.userData.active = false;
+                        n.children[0].children[0].material.color.set(0x444444); 
+                        n.rotation.x = Math.PI / 2.1;
+                        score++; 
+                        document.getElementById('counter').innerText = score;
+                    }
+                } else {
+                    const nX = n.position.x + n.userData.vel.x;
+                    const nZ = n.position.z + n.userData.vel.z;
+                    if (checkHit(nX, nZ)) { n.userData.vel.x *= -1; n.userData.vel.z *= -1; }
+                    else { n.position.set(nX, 0, nZ); }
+                    n.lookAt(n.position.x + n.userData.vel.x, 0, n.position.z + n.userData.vel.z);
+                }
+            });
+
+            if (!isNearAny) {
+                player.children[0].position.z = 0;
+                player.children[0].position.y = 0;
+                document.getElementById('progress-container').style.display = 'none';
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            update();
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
