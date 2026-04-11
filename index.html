@@ -125,6 +125,133 @@
 
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x87ceeb);
+<!DOCTYPE html>
+<html lang="uk">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Game - Alpha Version</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Arial', sans-serif;
+            background: #87ceeb;
+            touch-action: none;
+        }
+
+        #alpha-notice {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            color: #ffcc00;
+            text-align: center;
+            font-size: 11px;
+            padding: 6px 0;
+            z-index: 100;
+            pointer-events: none;
+            border-bottom: 1px solid #ffcc00;
+        }
+
+        #ui {
+            position: absolute;
+            top: 45px;
+            left: 15px;
+            color: white;
+            font-size: 20px;
+            text-shadow: 2px 2px 5px rgba(0, 0, 0, 0.5);
+            z-index: 10;
+            font-weight: bold;
+            pointer-events: none;
+        }
+
+        #progress-container {
+            position: absolute;
+            top: 80px;
+            left: 15px;
+            width: 180px;
+            height: 12px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 2px solid #ff00ff;
+            display: none;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        #progress-bar {
+            width: 0%;
+            height: 100%;
+            background: #ff00ff;
+            box-shadow: 0 0 10px #ff00ff;
+        }
+
+        .joystick {
+            position: absolute;
+            bottom: 40px;
+            width: 120px;
+            height: 120px;
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 50%;
+            touch-action: none;
+            z-index: 20;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+        }
+
+        #move-joy { left: 30px; }
+        #look-joy { right: 30px; }
+
+        .stick {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 50px;
+            height: 50px;
+            background: rgba(255, 255, 255, 0.4);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+
+        #instr {
+            position: absolute;
+            bottom: 10px;
+            width: 100%;
+            text-align: center;
+            color: white;
+            font-size: 10px;
+            pointer-events: none;
+            opacity: 0.6;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="alpha-notice">
+        Ця гра знаходиться в Альфа версії. Якщо знайдете помилки, повідомте на <b>nau1234510@gmail.com</b>
+    </div>
+
+    <div id="ui">ЗАТРАХАНО: <span id="counter">0</span></div>
+    <div id="progress-container">
+        <div id="progress-bar"></div>
+    </div>
+    <div id="instr">Лівий джойстик - Рух | Правий - Огляд</div>
+
+    <div id="move-joy" class="joystick"><div class="stick"></div></div>
+    <div id="look-joy" class="joystick"><div class="stick"></div></div>
+
+    <script type="importmap">
+        { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87ceeb);
         scene.fog = new THREE.Fog(0x87ceeb, 30, 200);
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -264,16 +391,15 @@
         function update() {
             const dt = clock.getDelta();
             
-            // ВАРІАНТ 1: Якщо ведемо джойстик вправо, кут yaw має зменшуватися (поворот вправо в Three.js)
-            // Якщо цей варіант знову не той — просто зміни мінус на плюс в рядку нижче.
             yaw -= lookData.x * 0.06; 
             pitch = Math.max(-0.4, Math.min(0.6, pitch - lookData.y * 0.04));
 
             const dirX = Math.sin(yaw), dirZ = Math.cos(yaw);
             const speed = 16 * dt;
 
-            let speedX = (dirX * -moveData.y * speed + Math.cos(yaw) * moveData.x * speed);
-            let speedZ = (dirZ * -moveData.y * speed - Math.sin(yaw) * moveData.x * speed);
+            // ВИПРАВЛЕНО: Корекція знаків для руху вліво/вправо (moveData.x)
+            let speedX = (dirX * -moveData.y * speed - Math.cos(yaw) * moveData.x * speed);
+            let speedZ = (dirZ * -moveData.y * speed + Math.sin(yaw) * moveData.x * speed);
             
             if (keys['KeyW']) { speedX += dirX * speed; speedZ += dirZ * speed; }
             if (keys['KeyS']) { speedX -= dirX * speed; speedZ -= dirZ * speed; }
