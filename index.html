@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Game - Alpha Version</title>
+    <title>Game - Alpha Fixed Controls</title>
     <style>
         body {
             margin: 0;
@@ -104,14 +104,14 @@
 <body>
 
     <div id="alpha-notice">
-        Ця гра знаходиться в Альфа версії. Якщо знайдете помилки, повідомте на <b>nau1234510@gmail.com</b>
+        Альфа версія. Повідомити про баги: <b>nau1234510@gmail.com</b>
     </div>
 
     <div id="ui">ЗАТРАХАНО: <span id="counter">0</span></div>
     <div id="progress-container">
         <div id="progress-bar"></div>
     </div>
-    <div id="instr">Лівий джойстик - Рух | Правий - Огляд</div>
+    <div id="instr">Лівий - Рух | Правий - Огляд</div>
 
     <div id="move-joy" class="joystick"><div class="stick"></div></div>
     <div id="look-joy" class="joystick"><div class="stick"></div></div>
@@ -143,6 +143,166 @@
         const grass = new THREE.Mesh(new THREE.PlaneGeometry(mapSize, mapSize), new THREE.MeshStandardMaterial({ color: 0x3d8c40 }));
         grass.rotation.x = -Math.PI / 2;
         scene.add(grass);
+
+        function addTree(x, z) {
+            const g = new THREE.Group();
+            const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.6, 4), new THREE.MeshStandardMaterial({ color: 0x4b3621 }));
+            trunk.position.y = 2;
+            const top = new THREE.Mesh(new THREE.SphereGeometry(2.5), new THREE.MeshStandardMaterial({ color: 0x2d5a27 }));
+            top.position.y = 5;
+            g.add(trunk, top); 
+            g.position.set(x, 0, z);
+            scene.add(g); 
+            obstacles.push({ x, z, r: 1.8 });
+        }
+
+        for (let i = -190; i <= 190; i += 20) {
+            for (let j = -190; j <= 190; j += 20) {
+                if (Math.random() > 0.4) {
+                    const offX = (Math.random() - 0.5) * 12;
+                    const offZ = (Math.random() - 0.5) * 12;
+                    if (Math.abs(i + offX) > 8 || Math.abs(j + offZ) > 8) addTree(i + offX, j + offZ);
+                }
+            }
+        }
+
+        function createMan(color) {
+            const container = new THREE.Group();
+            const bodyMesh = new THREE.Group();
+            const b = new THREE.Mesh(new THREE.CapsuleGeometry(0.4, 1.0), new THREE.MeshStandardMaterial({ color }));
+            b.position.y = 1.1;
+            const h = new THREE.Mesh(new THREE.SphereGeometry(0.3), new THREE.MeshStandardMaterial({ color: 0xffdbac }));
+            h.position.y = 2.0;
+            bodyMesh.add(b, h);
+            container.add(bodyMesh); 
+            return container;
+        }
+
+        const player = createMan(0xff00ff);
+        scene.add(player);
+
+        const npcs = [];
+        for (let i = 0; i < 45; i++) {
+            const n = createMan(0x00ccff);
+            n.position.set((Math.random() - 0.5) * 360, 0, (Math.random() - 0.5) * 360);
+            n.userData = { active: true, progress: 0, vel: new THREE.Vector3((Math.random() - 0.5) * 0.12, 0, (Math.random() - 0.5) * 0.12) };
+            npcs.push(n);
+            scene.add(n);
+        }
+
+        let yaw = 0, pitch = 0.2, score = 0;
+        const moveData = { x: 0, y: 0 }, lookData = { x: 0, y: 0 };
+
+        const setupJoystick = (id, data) => {
+            const el = document.getElementById(id);
+            const stick = el.querySelector('.stick');
+            let activeId = null;
+
+            const handleTouch = (e) => {
+                const touch = Array.from(e.changedTouches).find(t => activeId === null || t.identifier === activeId);
+                if (!touch) return;
+                activeId = touch.identifier;
+                const rect = el.getBoundingClientRect();
+                let dx = touch.clientX - (rect.left + rect.width / 2);
+                let dy = touch.clientY - (rect.top + rect.height / 2);
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist > 50) { dx *= 50 / dist; dy *= 50 / dist; }
+                data.x = dx / 50; data.y = dy / 50;
+                stick.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+                e.preventDefault();
+            };
+
+            el.addEventListener('touchstart', handleTouch, { passive: false });
+            el.addEventListener('touchmove', handleTouch, { passive: false });
+            el.addEventListener('touchend', (e) => {
+                const touch = Array.from(e.changedTouches).find(t => t.identifier === activeId);
+                if (touch) {
+                    activeId = null; data.x = 0; data.y = 0;
+                    stick.style.transform = `translate(-50%, -50%)`;
+                }
+            });
+        };
+
+        setupJoystick('move-joy', moveData);
+        setupJoystick('look-joy', lookData);
+
+        const clock = new THREE.Clock();
+        function checkHit(tx, tz) {
+            if (Math.abs(tx) > 198 || Math.abs(tz) > 198) return true;
+            return obstacles.some(o => Math.sqrt((tx - o.x) ** 2 + (tz - o.z) ** 2) < o.r);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const dt = clock.getDelta();
+            
+            // Огляд (Yaw)
+            yaw -= lookData.x * 0.06;
+            pitch = Math.max(-0.4, Math.min(0.6, pitch - lookData.y * 0.04));
+
+            // Розрахунок напрямків
+            const forwardX = Math.sin(yaw);
+            const forwardZ = Math.cos(yaw);
+            const rightX = Math.cos(yaw);
+            const rightZ = -Math.sin(yaw);
+
+            const speed = 16 * dt;
+
+            // РУХ: Виправлено інверсію ліво/право
+            // moveData.y відповідає за вперед/назад, moveData.x за ліво/право
+            let sx = (forwardX * -moveData.y * speed) + (rightX * -moveData.x * speed);
+            let sz = (forwardZ * -moveData.y * speed) + (rightZ * -moveData.x * speed);
+
+            if (!checkHit(player.position.x + sx, player.position.z)) player.position.x += sx;
+            if (!checkHit(player.position.x, player.position.z + sz)) player.position.z += sz;
+            player.rotation.y = yaw;
+
+            camera.position.set(player.position.x - forwardX * 9, player.position.y + 4.5 + pitch * 5, player.position.z - forwardZ * 9);
+            camera.lookAt(player.position.x, player.position.y + 1.2, player.position.z);
+
+            let isNear = false;
+            npcs.forEach(n => {
+                if (!n.userData.active) return;
+                if (player.position.distanceTo(n.position) < 2.2) {
+                    isNear = true;
+                    n.lookAt(player.position.x, 0, player.position.z);
+                    const r = Math.sin(Date.now() * 0.025);
+                    player.children[0].position.z = r * 0.5;
+                    n.userData.progress += dt * 0.65;
+                    document.getElementById('progress-container').style.display = 'block';
+                    document.getElementById('progress-bar').style.width = (Math.min(n.userData.progress, 1) * 100) + '%';
+                    if (n.userData.progress >= 1) {
+                        n.userData.active = false;
+                        n.children[0].children[0].material.color.set(0x444444);
+                        n.rotation.x = Math.PI / 2.1;
+                        score++;
+                        document.getElementById('counter').innerText = score;
+                    }
+                } else {
+                    const nx = n.position.x + n.userData.vel.x, nz = n.position.z + n.userData.vel.z;
+                    if (checkHit(nx, nz)) { n.userData.vel.x *= -1; n.userData.vel.z *= -1; }
+                    else n.position.set(nx, 0, nz);
+                    n.lookAt(n.position.x + n.userData.vel.x, 0, n.position.z + n.userData.vel.z);
+                }
+            });
+
+            if (!isNear) {
+                player.children[0].position.set(0, 0, 0);
+                document.getElementById('progress-container').style.display = 'none';
+            }
+
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
 
         function addTree(x, z) {
             const g = new THREE.Group();
